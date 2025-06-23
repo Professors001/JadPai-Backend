@@ -1,0 +1,48 @@
+# Use a modern version of Docker Compose
+version: '3.8'
+
+# Define the services (containers) for your application
+services:
+  # The MySQL database service
+  db:
+    image: mysql:8.0
+    container_name: my-project-db
+    restart: unless-stopped
+    env_file: ./.env
+    ports:
+      # Exposing the port to the host machine
+      - "3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+    # Define a network for the services to communicate
+    networks:
+      - app-network
+
+  # phpMyAdmin service
+  phpmyadmin:
+    # Use the official phpMyAdmin image
+    image: phpmyadmin/phpmyadmin
+    container_name: my-project-pma
+    # It must depend on the db service to ensure the db starts first
+    depends_on:
+      - db
+    restart: unless-stopped
+    # Expose port 8080 on the host to connect to the container's port 80
+    ports:
+      - "8080:80"
+    environment:
+      # This tells phpMyAdmin which database host to connect to.
+      # 'db' is the service name of our MySQL container.
+      PMA_HOST: db
+    networks:
+      - app-network
+
+# Define the networks used by the services
+networks:
+  app-network:
+    driver: bridge
+
+# Define the named volumes to persist data
+volumes:
+  db-data:
+    driver: local
