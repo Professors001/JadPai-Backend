@@ -79,11 +79,96 @@ exports.deleteEnrollment = async (req, res) => {
     }
 };
 
+/**
+ * Gets all events a user is enrolled in, transforming the result
+ * into a nested structure that includes a count of confirmed attendees for each event.
+ */
 exports.getEnrollmentsByUserId = async (req, res) => {
-    const { userId } = req.params;
+    const userId = req.params.id;
+
+    // The SQL query is updated with a subquery to get the confirmed count.
+    const sqlQuery = `
+        SELECT
+            e.id AS enrollment_id,
+            e.user_id,
+            e.event_id,
+            e.evidence_img_path,
+            e.name AS enrollment_name,
+            e.email AS enrollment_email,
+            e.phone AS enrollment_phone,
+            e.status,
+            e.enroll_date,
+            e.update_timestamp,
+            v.name AS event_name,
+            v.description AS event_description,
+            v.max_cap AS event_max_cap,
+            v.creator_id AS event_creator_id,
+            
+            -- >>> CHANGE: Added a subquery to count confirmed enrollments for each event.
+            (SELECT COUNT(*) 
+             FROM enrollments 
+             WHERE event_id = v.id AND status = 'confirmed'
+            ) AS confirmed_count
+
+        FROM
+            enrollments AS e
+        INNER JOIN
+            events AS v ON e.event_id = v.id
+        WHERE
+            e.user_id = ?;
+    `;
+
     try {
         const conn = await connectMySQL();
-        const [results] = await conn.query('SELECT * FROM enrollments WHERE user_id = ?', [userId]);
+        const [results] = await conn.query(sqlQuery, [userId]);
+
+        if (results.length === 0) {
+            return res.status(404).json({ message: 'No enrollments found for this user.' });
+        }
+
+        // --- TRANSFORMATION LOGIC UPDATED HERE ---
+        const formattedResults = results.map(row => {
+            // The nested 'event' object now includes the confirmed_count
+            const eventObject = {
+                id: row.event_id,
+                name: row.event_name,
+                description: row.event_description,
+                max_cap: row.event_max_cap,
+                creator_id: row.event_creator_id,
+                // >>> CHANGE: Added the new count to the event object.
+                confirmed_count: row.confirmed_count
+            };
+
+            const enrollmentObject = {
+                id: row.enrollment_id,
+                user_id: row.user_id,
+                status: row.status,
+                evidence_img_path: row.evidence_img_path,
+                name: row.enrollment_name,
+                email: row.enrollment_email,
+                phone: row.enrollment_phone,
+                enroll_date: row.enroll_date,
+                update_timestamp: row.update_timestamp,
+                event: eventObject
+            };
+
+            return enrollmentObject;
+        });
+        // --- TRANSFORMATION LOGIC ENDS HERE ---
+
+        res.json(formattedResults);
+
+    } catch (error) {
+        console.error('Error fetching user enrollments:', error.message);
+        res.status(500).json({ error: 'Error fetching user enrollments' });
+    }
+};
+
+exports.getAllEnrollmentsByEventId = async (req, res) => {
+    const eventId = req.params.id;
+    try {
+        const conn = await connectMySQL();
+        const [results] = await conn.query('SELECT * FROM enrollments WHERE event_id = ?', [eventId]);
         res.json(results);
     } catch (error) {
         console.error('Error fetching enrollments:', error.message);

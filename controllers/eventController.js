@@ -2,10 +2,27 @@
 const { connectMySQL } = require('../database');
 
 exports.getAllEvents = async (req, res) => {
+    // This single query gets all events and their respective confirmed counts.
+    const sqlQuery = `
+        SELECT
+            e.*,
+            (SELECT COUNT(*) 
+             FROM enrollments 
+             WHERE event_id = e.id AND status = 'confirmed'
+            ) AS confirmed_count
+        FROM
+            events AS e
+        ORDER BY
+            e.id DESC; -- Optional: order by most recent events
+    `;
+
     try {
         const conn = await connectMySQL();
-        const [results] = await conn.query('SELECT * FROM events');
+        const [results] = await conn.query(sqlQuery);
+
+        // The result set is already perfectly formatted.
         res.json(results);
+
     } catch (error) {
         console.error('Error fetching events:', error.message);
         res.status(500).json({ error: 'Error fetching events' });
@@ -13,14 +30,33 @@ exports.getAllEvents = async (req, res) => {
 };
 
 exports.getEventById = async (req, res) => {
-    const id = req.params.id;
+    const { id } = req.params;
+
+    // A single, efficient query to get event details and the confirmed count.
+    const sqlQuery = `
+        SELECT
+            e.*,
+            (SELECT COUNT(*) 
+             FROM enrollments 
+             WHERE event_id = e.id AND status = 'confirmed'
+            ) AS confirmed_count
+        FROM
+            events AS e
+        WHERE
+            e.id = ?;
+    `;
+
     try {
         const conn = await connectMySQL();
-        const [results] = await conn.query('SELECT * FROM events WHERE id = ?', [id]);
+        const [results] = await conn.query(sqlQuery, [id]);
+
         if (results.length === 0) {
             return res.status(404).json({ error: 'Event not found' });
         }
+
+        // The result is already in the correct format, no transformation needed.
         res.json(results[0]);
+
     } catch (error) {
         console.error('Error fetching event:', error.message);
         res.status(500).json({ error: 'Error fetching event' });
@@ -85,18 +121,6 @@ exports.getAllEventsThatUserNotAttending = async (req, res) => {
     try {
         const conn = await connectMySQL();
         const [results] = await conn.query('SELECT * FROM events WHERE id NOT IN (SELECT event_id FROM enrollments WHERE user_id = ?)', [userId]);
-        res.json(results);
-    } catch (error) {
-        console.error('Error fetching events:', error.message);
-        res.status(500).json({ error: 'Error fetching events' });
-    }
-};
-
-exports.getAllEventsThatUserAttending = async (req, res) => {
-    const userId = req.params.id;
-    try {
-        const conn = await connectMySQL();
-        const [results] = await conn.query('SELECT * FROM events WHERE id IN (SELECT event_id FROM enrollments WHERE user_id = ?)', [userId]);
         res.json(results);
     } catch (error) {
         console.error('Error fetching events:', error.message);

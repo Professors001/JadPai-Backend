@@ -9,4 +9,8 @@ router.post('/', enrollmentController.createEnrollment);
 router.put('/:id', enrollmentController.updateEnrollment);
 router.delete('/:id', enrollmentController.deleteEnrollment);
 
+router.get('/users/:id', enrollmentController.getEnrollmentsByUserId);
+
+router.get('/events/:id', enrollmentController.getAllEnrollmentsByEventId);
+
 module.exports = router;
