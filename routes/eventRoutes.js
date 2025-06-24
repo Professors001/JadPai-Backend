@@ -9,4 +9,7 @@ router.post('/', eventController.createEvent);
 router.put('/:id', eventController.updateEvent);
 router.delete('/:id', eventController.deleteEvent);
 
+router.get('/users/:id/attending', eventController.getAllEventsThatUserAttending);
+router.get('/users/:id/not_attending', eventController.getAllEventsThatUserNotAttending);
+
 module.exports = router;

@@ -78,3 +78,15 @@ exports.deleteEnrollment = async (req, res) => {
         res.status(500).json({ error: 'Error deleting enrollment' });
     }
 };
+
+exports.getEnrollmentsByUserId = async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const conn = await connectMySQL();
+        const [results] = await conn.query('SELECT * FROM enrollments WHERE user_id = ?', [userId]);
+        res.json(results);
+    } catch (error) {
+        console.error('Error fetching enrollments:', error.message);
+        res.status(500).json({ error: 'Error fetching enrollments' });
+    }
+};
