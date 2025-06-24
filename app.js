@@ -2,6 +2,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const { connectMySQL } = require('./database');
+const cors = require('cors')
 
 const userRoutes = require('./routes/userRoutes');
 const enrollmentRoutes = require('./routes/enrollmentRoutes');
@@ -13,6 +14,7 @@ const port = 6969;
 app.use(bodyParser.text());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cors())
 
 // Routes
 app.use('/users', userRoutes);
@@ -20,7 +22,7 @@ app.use('/enrollments', enrollmentRoutes);
 app.use('/events', eventRoutes);
 
 app.get('/', (req, res) => {
-    res.send('Hello This is NodeJS Server with Nodemon with Seperated File');
+    res.send('JadPai Backend Are Still Running Fine :P');
 });
 
 app.get('/book', (req, res) => {
