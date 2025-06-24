@@ -2,7 +2,8 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const { connectMySQL } = require('./database');
-const cors = require('cors')
+const cors = require('cors');
+const path = require('path');
 
 const userRoutes = require('./routes/userRoutes');
 const enrollmentRoutes = require('./routes/enrollmentRoutes');
@@ -11,10 +12,13 @@ const eventRoutes = require('./routes/eventRoutes');
 const app = express();
 const port = 6969;
 
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.use(bodyParser.text());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors())
+
 
 // Routes
 app.use('/users', userRoutes);

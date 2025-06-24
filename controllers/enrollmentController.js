@@ -28,15 +28,35 @@ exports.getEnrollmentById = async (req, res) => {
 };
 
 exports.createEnrollment = async (req, res) => {
-    const newEnrollment = req.body;
-    if (!newEnrollment || Object.keys(newEnrollment).length === 0) {
-        return res.status(400).json({ error: 'Enrollment data is missing in the request body.' });
+    // 1. Get userId directly from the request body, along with other fields.
+    const { name, phone, email, eventId, userId } = req.body;
+    const pictureFile = req.file;
+
+    // 2. Validation
+    if (!name || !phone || !email || !pictureFile || !eventId || !userId) {
+        return res.status(400).json({ error: 'All fields, including userId and eventId, are required.' });
     }
+
     try {
+        const imagePath = `/uploads/${pictureFile.filename}`;
+
+        const newEnrollmentData = {
+            name: name,
+            phone: phone,
+            email: email,
+            evidence_img_path: imagePath,
+            status: 'pending',
+            enroll_date: new Date(),
+            user_id: parseInt(userId, 10), // Use the userId from the request body
+            event_id: parseInt(eventId, 10), 
+        };
+        
         const conn = await connectMySQL();
-        const [result] = await conn.query('INSERT INTO enrollments SET ?', [newEnrollment]);
+        const [result] = await conn.query('INSERT INTO enrollments SET ?', [newEnrollmentData]);
         const enrollmentId = result.insertId;
+
         res.status(201).json({ message: 'Enrollment created successfully', enrollmentId: enrollmentId });
+
     } catch (error) {
         console.error('Error creating enrollment:', error.message);
         res.status(500).json({ error: 'Error creating enrollment' });
