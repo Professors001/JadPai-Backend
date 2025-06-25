@@ -74,16 +74,46 @@ exports.createUser = async (req, res) => {
 exports.updateUser = async (req, res) => {
     const userId = req.params.id;
     const userDataToUpdate = req.body;
+
     if (!userDataToUpdate || Object.keys(userDataToUpdate).length === 0) {
         return res.status(400).json({ error: 'No update data provided in the request body.' });
     }
+
     try {
+        // Check if a new password is being provided in the update data
+        if (userDataToUpdate.password) {
+            // Hash the new password
+            const saltRounds = 10;
+            const hashedPassword = await bcrypt.hash(userDataToUpdate.password, saltRounds);
+            
+            // Assign the hashed password to the correct `password_hash` field
+            userDataToUpdate.password_hash = hashedPassword;
+            
+            // IMPORTANT: Remove the plain-text 'password' property so it doesn't
+            // try to update a column that doesn't exist.
+            delete userDataToUpdate.password;
+        }
+
         const conn = await connectMySQL();
-        const [result] = await conn.query('UPDATE users SET ? WHERE id = ?', [userDataToUpdate, userId]);
-        if (result.affectedRows === 0) {
+        const [updateResult] = await conn.query('UPDATE users SET ? WHERE id = ?', [userDataToUpdate, userId]);
+
+        if (updateResult.affectedRows === 0) {
             return res.status(404).json({ message: `User with ID ${userId} not found.` });
         }
-        res.status(200).json({ message: `User with ID ${userId} updated successfully.` });
+
+        // After updating, refetch the user's data to return the updated profile
+        const [userRows] = await conn.query('SELECT id, name, surname, email, phone, role FROM users WHERE id = ?', [userId]);
+
+        if (userRows.length === 0) {
+            return res.status(404).json({ message: 'User not found after update.' });
+        }
+
+        // Return the updated user object, which the frontend expects
+        res.status(200).json({ 
+            message: `User with ID ${userId} updated successfully.`,
+            user: userRows[0] 
+        });
+
     } catch (error) {
         console.error('Error updating user:', error.message);
         res.status(500).json({ error: 'Error updating user' });
