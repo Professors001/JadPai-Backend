@@ -11,4 +11,6 @@ router.delete('/:id', userController.deleteUser);
 
 router.post('/auth', userController.loginUser);
 
+router.post('/auth/google', userController.googleLogin);
+
 module.exports = router;

@@ -1,8 +1,24 @@
 // controllers/userController.js
 const { connectMySQL } = require('../database');
 const bcrypt = require('bcrypt');
+const { OAuth2Client } = require('google-auth-library');
 
 const saltRounds = 10;
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Verify Google ID token
+async function verifyGoogleToken(token) {
+    try {
+        const ticket = await client.verifyIdToken({
+            idToken: token,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        return ticket.getPayload();
+    } catch (error) {
+        console.error('Token verification failed:', error);
+        return null;
+    }
+}
 
 exports.getAllUsers = async (req, res) => {
     try {
@@ -138,67 +154,6 @@ exports.deleteUser = async (req, res) => {
     }
 };
 
-// exports.loginUser = async (req, res) => {
-//     // 1. Get email and password from the request body
-//     const { email, password } = req.body;
-
-//     // Basic validation
-//     if (!email || !password) {
-//         return res.status(400).json({ error: 'Email and password are required.' });
-//     }
-
-//     try {
-//         const conn = await connectMySQL();
-
-//         // 2. Find the user in the database by their email address
-//         const [users] = await conn.query('SELECT * FROM users WHERE email = ?', [email]);
-
-//         // 3. Handle user not found
-//         if (users.length === 0) {
-//             // IMPORTANT: Use a generic error message for security.
-//             // Do not reveal whether the email exists or not.
-//             return res.status(401).json({ error: 'Invalid credentials.' });
-//         }
-
-//         const user = users[0];
-
-//         // 4. Compare the provided password with the stored hash
-//         const isMatch = await bcrypt.compare(password, user.password_hash);
-
-//         // 5. Handle password not matching
-//         if (!isMatch) {
-//             // Use the same generic error message.
-//             return res.status(401).json({ error: 'Invalid credentials.' });
-//         }
-
-//         // 6. If credentials are correct, generate a JWT
-//         // The payload contains data you want to store in the token
-//         const payload = {
-//             userId: user.id,
-//             email: user.email,
-//             name: user.name
-//             // You can add other non-sensitive data like a user role
-//         };
-
-//         // Sign the token with a secret key and set an expiration time
-//         const token = jwt.sign(
-//             payload,
-//             process.env.JWT_SECRET, // Your secret key
-//             { expiresIn: '1h' }     // Token expires in 1 hour
-//         );
-
-//         // 7. Send the token back to the client
-//         res.status(200).json({
-//             message: 'Login successful!',
-//             token: token
-//         });
-
-//     } catch (error) {
-//         console.error('Error during login:', error.message);
-//         res.status(500).json({ error: 'Internal server error.' });
-//     }
-// };
-
 exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
 
@@ -234,5 +189,94 @@ exports.loginUser = async (req, res) => {
     } catch (error) {
         console.error('Error during login:', error.message);
         res.status(500).json({ error: 'Internal server error.' });
+    }
+};
+
+// NEW: Google OAuth Login
+exports.googleLogin = async (req, res) => {
+    const { token } = req.body;
+
+    if (!token) {
+        return res.status(400).json({ error: 'Google token is required.' });
+    }
+
+    try {
+        // Verify the token with Google
+        const payload = await verifyGoogleToken(token);
+        
+        if (!payload) {
+            return res.status(401).json({ error: 'Invalid Google token.' });
+        }
+
+        const { sub: googleId, email, name, picture, email_verified } = payload;
+
+        if (!email_verified) {
+            return res.status(401).json({ error: 'Google email not verified.' });
+        }
+
+        const conn = await connectMySQL();
+
+        // Check if user already exists with this Google ID
+        let [existingUsers] = await conn.query('SELECT * FROM users WHERE google_id = ?', [googleId]);
+        
+        if (existingUsers.length > 0) {
+            // User exists with Google ID, log them in
+            const user = existingUsers[0];
+            delete user.password_hash; // Remove password hash before sending
+            
+            return res.status(200).json({
+                message: 'Google login successful!',
+                user: user
+            });
+        }
+
+        // Check if user exists with same email (for linking accounts)
+        [existingUsers] = await conn.query('SELECT * FROM users WHERE email = ?', [email]);
+        
+        if (existingUsers.length > 0) {
+            // User exists with same email, link Google account
+            const userId = existingUsers[0].id;
+            await conn.query('UPDATE users SET google_id = ? WHERE id = ?', [googleId, userId]);
+            
+            // Fetch updated user
+            const [updatedUsers] = await conn.query('SELECT * FROM users WHERE id = ?', [userId]);
+            const user = updatedUsers[0];
+            delete user.password_hash;
+            
+            return res.status(200).json({
+                message: 'Google account linked and login successful!',
+                user: user
+            });
+        }
+
+        // Create new user from Google data
+        const nameParts = name ? name.split(' ') : ['', ''];
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        const newUser = {
+            name: firstName,
+            surname: lastName,
+            email: email,
+            google_id: googleId,
+            role: 'user' // Default role
+        };
+
+        const [result] = await conn.query('INSERT INTO users SET ?', [newUser]);
+        const userId = result.insertId;
+
+        // Fetch the created user
+        const [createdUsers] = await conn.query('SELECT * FROM users WHERE id = ?', [userId]);
+        const user = createdUsers[0];
+        delete user.password_hash;
+
+        res.status(201).json({
+            message: 'Google user created and login successful!',
+            user: user
+        });
+
+    } catch (error) {
+        console.error('Error during Google login:', error.message);
+        res.status(500).json({ error: 'Internal server error during Google login.' });
     }
 };

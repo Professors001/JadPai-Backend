@@ -106,7 +106,6 @@ exports.deleteEnrollment = async (req, res) => {
 exports.getEnrollmentsByUserId = async (req, res) => {
     const userId = req.params.id;
 
-    // The SQL query is updated with a subquery to get the confirmed count.
     const sqlQuery = `
         SELECT
             e.id AS enrollment_id,
@@ -123,13 +122,10 @@ exports.getEnrollmentsByUserId = async (req, res) => {
             v.description AS event_description,
             v.max_cap AS event_max_cap,
             v.creator_id AS event_creator_id,
-            
-            -- >>> CHANGE: Added a subquery to count confirmed enrollments for each event.
             (SELECT COUNT(*) 
              FROM enrollments 
              WHERE event_id = v.id AND status = 'confirmed'
             ) AS confirmed_count
-
         FROM
             enrollments AS e
         INNER JOIN
@@ -142,20 +138,13 @@ exports.getEnrollmentsByUserId = async (req, res) => {
         const conn = await connectMySQL();
         const [results] = await conn.query(sqlQuery, [userId]);
 
-        if (results.length === 0) {
-            return res.status(404).json({ message: 'No enrollments found for this user.' });
-        }
-
-        // --- TRANSFORMATION LOGIC UPDATED HERE ---
         const formattedResults = results.map(row => {
-            // The nested 'event' object now includes the confirmed_count
             const eventObject = {
                 id: row.event_id,
                 name: row.event_name,
                 description: row.event_description,
                 max_cap: row.event_max_cap,
                 creator_id: row.event_creator_id,
-                // >>> CHANGE: Added the new count to the event object.
                 confirmed_count: row.confirmed_count
             };
 
@@ -174,9 +163,8 @@ exports.getEnrollmentsByUserId = async (req, res) => {
 
             return enrollmentObject;
         });
-        // --- TRANSFORMATION LOGIC ENDS HERE ---
-
-        res.json(formattedResults);
+        
+        res.status(200).json(formattedResults);
 
     } catch (error) {
         console.error('Error fetching user enrollments:', error.message);
