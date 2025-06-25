@@ -18,6 +18,30 @@ services:
     networks:
       - app-network
 
+  # Node.js backend service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: my-project-backend
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "6969:6969"  # Your app runs on port 6969
+    env_file: ./.env
+    environment:
+      # Database connection will use the service name 'db' as hostname
+      DB_HOST: db
+      DB_PORT: 3306
+      NODE_ENV: production
+    volumes:
+      # Optional: Mount source code for development (remove for production)
+      - .:/app
+      - /app/node_modules
+    networks:
+      - app-network
+
   # phpMyAdmin service
   phpmyadmin:
     # Use the official phpMyAdmin image
