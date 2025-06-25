@@ -195,12 +195,6 @@ exports.loginUser = async (req, res) => {
         // This is a critical security step. Never send password hashes to the client.
         delete user.password_hash;
 
-        const payload = {
-            userId: user.id,
-            email: user.email,
-            name: user.name
-        };
-
         // --- CHANGE 2: Include the sanitized user object in the response ---
         res.status(200).json({
             message: 'Login successful!',

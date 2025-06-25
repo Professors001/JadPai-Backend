@@ -120,7 +120,10 @@ exports.getAllEventsThatUserNotAttending = async (req, res) => {
     const userId = req.params.id;
     try {
         const conn = await connectMySQL();
-        const [results] = await conn.query('SELECT * FROM events WHERE id NOT IN (SELECT event_id FROM enrollments WHERE user_id = ?)', [userId]);
+        const [results] = await conn.query(
+            'SELECT * FROM events WHERE id NOT IN (SELECT event_id FROM enrollments WHERE user_id = ?) ORDER BY id DESC', 
+            [userId]
+        );
         res.json(results);
     } catch (error) {
         console.error('Error fetching events:', error.message);
