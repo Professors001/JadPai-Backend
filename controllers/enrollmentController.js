@@ -1,5 +1,6 @@
 // controllers/enrollmentController.js
 const { connectMySQL } = require('../database');
+const { sendStatusChangeEmail } = require('../services/emailService');
 
 exports.getAllEnrollments = async (req, res) => {
     try {
@@ -183,5 +184,58 @@ exports.getAllEnrollmentsByEventId = async (req, res) => {
     } catch (error) {
         console.error('Error fetching enrollments:', error.message);
         res.status(500).json({ error: 'Error fetching enrollments' });
+    }
+};
+
+exports.updateEnrollmentStatus = async (req, res) => {
+    const { id } = req.params;
+    const { newStatus } = req.body;
+
+    if (!newStatus) {
+        return res.status(400).json({ error: 'newStatus is required.' });
+    }
+
+    try {
+        const conn = await connectMySQL();
+
+        const [enrollments] = await conn.query(
+            // We still need the event name for the email, but no longer creator_id for a permission check
+            `SELECT e.email, e.name, ev.name AS event_name 
+             FROM enrollments e 
+             JOIN events ev ON e.event_id = ev.id 
+             WHERE e.id = ?`,
+            [id]
+        );
+
+        if (enrollments.length === 0) {
+            return res.status(404).json({ error: 'Enrollment not found.' });
+        }
+        const enrollment = enrollments[0];
+
+        /*
+        // --- IMPORTANT: Authorization logic temporarily commented out for Proof-of-Concept ---
+        // In a real application, you would uncomment this to ensure only authorized
+        // users (like an admin or the event creator) can change the status.
+
+        const loggedInUser = req.user; 
+        if (loggedInUser.role !== 'admin' && loggedInUser.userId !== enrollment.creator_id) {
+            return res.status(403).json({ error: 'Forbidden: You do not have permission to perform this action.' });
+        }
+        */
+
+        // If the check passes, proceed with the update
+        await conn.query(
+            'UPDATE enrollments SET status = ? WHERE id = ?',
+            [newStatus, id]
+        );
+
+        // Send the email notification
+        await sendStatusChangeEmail(enrollment.email, enrollment.name, enrollment.event_name, newStatus);
+
+        res.status(200).json({ message: `Enrollment status updated to ${newStatus} and notification sent.` });
+
+    } catch (error) {
+        console.error('Error updating enrollment status:', error.message);
+        res.status(500).json({ error: 'Internal server error.' });
     }
 };

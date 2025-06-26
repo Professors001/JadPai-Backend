@@ -20,4 +20,7 @@ router.post(
     enrollmentController.createEnrollment
 );
 
+// The authenticateToken middleware has been removed from this line
+router.put('/:id/status', enrollmentController.updateEnrollmentStatus);
+
 module.exports = router;
