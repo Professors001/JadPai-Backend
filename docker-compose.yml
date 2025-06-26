@@ -34,11 +34,14 @@ services:
       # Database connection will use the service name 'db' as hostname
       DB_HOST: db
       DB_PORT: 3306
-      NODE_ENV: production
+      NODE_ENV: development  # Changed to development for hot reload
     volumes:
-      # Optional: Mount source code for development (remove for production)
+      # Mount source code for development
       - .:/app
-      - /app/node_modules
+      # Use named volume for node_modules to prevent recreation
+      - node_modules:/app/node_modules
+    # Override the default CMD to use nodemon for development
+    command: npm run dev
     networks:
       - app-network
 
@@ -69,4 +72,7 @@ networks:
 # Define the named volumes to persist data
 volumes:
   db-data:
+    driver: local
+  # Named volume for node_modules to persist between container recreations
+  node_modules:
     driver: local

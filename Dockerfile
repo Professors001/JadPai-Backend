@@ -4,25 +4,32 @@ FROM node:18-alpine
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json (if available)
+# Copy package.json and package-lock.json first to leverage build cache
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# --- FIX IS HERE ---
+# Install ALL dependencies (including devDependencies like nodemon)
+# We use 'npm install' which is standard for this purpose.
+RUN npm install
 
 # Copy the rest of the application code
 COPY . .
 
-# Create a non-root user to run the application
+# Create a non-root user to run the application (Excellent practice!)
+# No changes needed here, this is great for security.
 RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nextjs -u 1001
+RUN adduser -S appuser -u 1001
+# Note: I changed the username to a more generic 'appuser' but 'nextjs' is fine too.
 
-# Change ownership of the app directory to the nodejs user
-RUN chown -R nextjs:nodejs /app
-USER nextjs
+# Change ownership of the app directory to the new user
+RUN chown -R appuser:nodejs /app
+
+# Switch to the non-root user
+USER appuser
 
 # Expose the port your app runs on
 EXPOSE 6969
 
-# Define the command to run your application
+# Define the default command to run your application.
+# This will be used for production, but docker-compose overrides it for development.
 CMD ["npm", "start"]

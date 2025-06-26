@@ -131,7 +131,9 @@ exports.getEnrollmentsByUserId = async (req, res) => {
         INNER JOIN
             events AS v ON e.event_id = v.id
         WHERE
-            e.user_id = ?;
+            e.user_id = ?
+        ORDER BY
+            e.enroll_date DESC;
     `;
 
     try {
