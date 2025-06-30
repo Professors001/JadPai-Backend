@@ -8,6 +8,7 @@ const path = require('path');
 const userRoutes = require('./routes/userRoutes');
 const enrollmentRoutes = require('./routes/enrollmentRoutes');
 const eventRoutes = require('./routes/eventRoutes');
+require('dotenv').config();
 
 const app = express();
 const port = 6969;

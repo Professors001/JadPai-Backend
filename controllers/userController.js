@@ -2,6 +2,7 @@
 const { connectMySQL } = require('../database');
 const bcrypt = require('bcrypt');
 const { OAuth2Client } = require('google-auth-library');
+const jwt = require('jsonwebtoken');
 
 const saltRounds = 10;
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -158,7 +159,7 @@ exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required.' });
+        return res.status(400).json({ message: 'ต้องการอีเมลและรหัสผ่าน' });
     }
 
     try {
@@ -166,29 +167,50 @@ exports.loginUser = async (req, res) => {
         const [users] = await conn.query('SELECT * FROM users WHERE email = ?', [email]);
 
         if (users.length === 0) {
-            return res.status(401).json({ error: 'Invalid credentials.' });
+            // ใช้ message กลางๆ เพื่อความปลอดภัย
+            return res.status(401).json({ message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' });
         }
 
         const user = users[0];
         const isMatch = await bcrypt.compare(password, user.password_hash);
 
         if (!isMatch) {
-            return res.status(401).json({ error: 'Invalid credentials.' });
+            // ใช้ message กลางๆ เพื่อความปลอดภัย
+            return res.status(401).json({ message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' });
         }
 
-        // --- CHANGE 1: Remove password hash before sending user data back ---
-        // This is a critical security step. Never send password hashes to the client.
+        // --- การเปลี่ยนแปลงเริ่มที่นี่ ---
+
+        // 1. สร้าง Payload สำหรับ JWT
+        // Payload คือข้อมูลที่เราต้องการเก็บไว้ใน Token
+        // ควรเก็บเฉพาะข้อมูลที่จำเป็นและไม่ละเอียดอ่อน เช่น ID, role
+        const payload = {
+            id: user.id,
+            email: user.email,
+            role: user.role, // สมมติว่าคุณมีคอลัมน์ role
+        };
+
+        // 2. สร้าง (เซ็น) JWT Token
+        const token = jwt.sign(
+            payload,
+            process.env.JWT_SECRET, // ใช้ Secret Key จาก .env
+            { expiresIn: process.env.JWT_EXPIRES_IN } // กำหนดอายุของ Token จาก .env
+        );
+
+        // 3. ลบ password hash ออกจาก object ที่จะส่งกลับไป (สำคัญมาก!)
         delete user.password_hash;
 
-        // --- CHANGE 2: Include the sanitized user object in the response ---
+        // 4. ส่ง Token กลับไปพร้อมกับข้อมูล User
+        // รูปแบบนี้จะเข้ากันได้พอดีกับที่ NextAuth `authorize` function คาดหวังไว้
         res.status(200).json({
-            message: 'Login successful!',
-            user: user // The user object (without the password hash)
+            message: 'เข้าสู่ระบบสำเร็จ!',
+            token: token, // <-- Token ที่สร้างใหม่
+            user: user    // <-- ข้อมูลผู้ใช้ (ที่ไม่มี password hash)
         });
 
     } catch (error) {
         console.error('Error during login:', error.message);
-        res.status(500).json({ error: 'Internal server error.' });
+        res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' });
     }
 };
 
