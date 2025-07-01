@@ -222,7 +222,6 @@ exports.googleLogin = async (req, res) => {
     }
 
     try {
-        // Verify the token with Google
         const payload = await verifyGoogleToken(token);
         
         if (!payload) {
@@ -236,64 +235,72 @@ exports.googleLogin = async (req, res) => {
         }
 
         const conn = await connectMySQL();
+        let user; // Declare user variable to be used in different scopes
 
         // Check if user already exists with this Google ID
         let [existingUsers] = await conn.query('SELECT * FROM users WHERE google_id = ?', [googleId]);
         
         if (existingUsers.length > 0) {
-            // User exists with Google ID, log them in
-            const user = existingUsers[0];
-            delete user.password_hash; // Remove password hash before sending
+            // Scenario 1: User exists with Google ID, log them in
+            user = existingUsers[0];
             
-            return res.status(200).json({
-                message: 'Google login successful!',
-                user: user
-            });
+        } else {
+            // Check if user exists with same email (for linking accounts)
+            [existingUsers] = await conn.query('SELECT * FROM users WHERE email = ?', [email]);
+            
+            if (existingUsers.length > 0) {
+                // Scenario 2: User exists with same email, link Google account
+                const userId = existingUsers[0].id;
+                await conn.query('UPDATE users SET google_id = ? WHERE id = ?', [googleId, userId]);
+                
+                // Fetch updated user to get all data for the token
+                const [updatedUsers] = await conn.query('SELECT * FROM users WHERE id = ?', [userId]);
+                user = updatedUsers[0];
+
+            } else {
+                // Scenario 3: Create new user from Google data
+                const nameParts = name ? name.split(' ') : ['', ''];
+                const firstName = nameParts[0] || '';
+                const lastName = nameParts.slice(1).join(' ') || '';
+
+                const newUser = {
+                    name: firstName,
+                    surname: lastName,
+                    email: email,
+                    google_id: googleId,
+                    role: 'user' // Default role
+                };
+
+                const [result] = await conn.query('INSERT INTO users SET ?', [newUser]);
+                const userId = result.insertId;
+
+                // Fetch the newly created user
+                const [createdUsers] = await conn.query('SELECT * FROM users WHERE id = ?', [userId]);
+                user = createdUsers[0];
+            }
         }
 
-        // Check if user exists with same email (for linking accounts)
-        [existingUsers] = await conn.query('SELECT * FROM users WHERE email = ?', [email]);
-        
-        if (existingUsers.length > 0) {
-            // User exists with same email, link Google account
-            const userId = existingUsers[0].id;
-            await conn.query('UPDATE users SET google_id = ? WHERE id = ?', [googleId, userId]);
-            
-            // Fetch updated user
-            const [updatedUsers] = await conn.query('SELECT * FROM users WHERE id = ?', [userId]);
-            const user = updatedUsers[0];
-            delete user.password_hash;
-            
-            return res.status(200).json({
-                message: 'Google account linked and login successful!',
-                user: user
-            });
-        }
-
-        // Create new user from Google data
-        const nameParts = name ? name.split(' ') : ['', ''];
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.slice(1).join(' ') || '';
-
-        const newUser = {
-            name: firstName,
-            surname: lastName,
-            email: email,
-            google_id: googleId,
-            role: 'user' // Default role
+        // ✨ 2. Create JWT Payload from the final user object
+        const jwtPayload = {
+            id: user.id,
+            name: user.name,
+            surname: user.surname,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
         };
 
-        const [result] = await conn.query('INSERT INTO users SET ?', [newUser]);
-        const userId = result.insertId;
+        // ✨ 3. Sign the token
+        const jwtToken = jwt.sign(
+            jwtPayload,
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN }
+        );
 
-        // Fetch the created user
-        const [createdUsers] = await conn.query('SELECT * FROM users WHERE id = ?', [userId]);
-        const user = createdUsers[0];
-        delete user.password_hash;
-
-        res.status(201).json({
-            message: 'Google user created and login successful!',
-            user: user
+        // ✨ 4. Return the token
+        res.status(200).json({
+            message: 'Google login successful!',
+            token: jwtToken
         });
 
     } catch (error) {
