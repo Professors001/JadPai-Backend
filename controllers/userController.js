@@ -158,59 +158,58 @@ exports.deleteUser = async (req, res) => {
 exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
 
+    // 1. Basic Input Validation (ตรวจสอบข้อมูลนำเข้าเบื้องต้น)
     if (!email || !password) {
-        return res.status(400).json({ message: 'ต้องการอีเมลและรหัสผ่าน' });
+        return res.status(400).json({ message: 'Email and password are required.' });
     }
 
     try {
         const conn = await connectMySQL();
         const [users] = await conn.query('SELECT * FROM users WHERE email = ?', [email]);
 
+        // 2. Verify User and Password (ตรวจสอบผู้ใช้และรหัสผ่าน)
         if (users.length === 0) {
-            // ใช้ message กลางๆ เพื่อความปลอดภัย
-            return res.status(401).json({ message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' });
+            // Use a generic message for security
+            return res.status(401).json({ message: 'Invalid credentials.' });
         }
 
         const user = users[0];
         const isMatch = await bcrypt.compare(password, user.password_hash);
 
         if (!isMatch) {
-            // ใช้ message กลางๆ เพื่อความปลอดภัย
-            return res.status(401).json({ message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' });
+            // Use a generic message for security
+            return res.status(401).json({ message: 'Invalid credentials.' });
         }
 
-        // --- การเปลี่ยนแปลงเริ่มที่นี่ ---
-
-        // 1. สร้าง Payload สำหรับ JWT
-        // Payload คือข้อมูลที่เราต้องการเก็บไว้ใน Token
-        // ควรเก็บเฉพาะข้อมูลที่จำเป็นและไม่ละเอียดอ่อน เช่น ID, role
+        // 3. Create JWT Payload (สร้างข้อมูลสำหรับใส่ใน JWT)
+        // Include all necessary non-sensitive user data for the frontend.
         const payload = {
             id: user.id,
+            name: user.name,
+            surname: user.surname,
             email: user.email,
-            role: user.role, // สมมติว่าคุณมีคอลัมน์ role
+            phone: user.phone,
+            role: user.role,
         };
 
-        // 2. สร้าง (เซ็น) JWT Token
+        // 4. Sign the JWT (สร้าง Token)
+        // The secret and expiration are loaded from your .env file.
         const token = jwt.sign(
             payload,
-            process.env.JWT_SECRET, // ใช้ Secret Key จาก .env
-            { expiresIn: process.env.JWT_EXPIRES_IN } // กำหนดอายุของ Token จาก .env
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN }
         );
 
-        // 3. ลบ password hash ออกจาก object ที่จะส่งกลับไป (สำคัญมาก!)
-        delete user.password_hash;
-
-        // 4. ส่ง Token กลับไปพร้อมกับข้อมูล User
-        // รูปแบบนี้จะเข้ากันได้พอดีกับที่ NextAuth `authorize` function คาดหวังไว้
+        // 5. Send the Final Response (ส่ง Token กลับไป)
+        // Only the message and token are returned.
         res.status(200).json({
-            message: 'เข้าสู่ระบบสำเร็จ!',
-            token: token, // <-- Token ที่สร้างใหม่
-            user: user    // <-- ข้อมูลผู้ใช้ (ที่ไม่มี password hash)
+            message: 'Login successful!',
+            token: token,
         });
 
     } catch (error) {
-        console.error('Error during login:', error.message);
-        res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' });
+        console.error('Login Error:', error.message);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
