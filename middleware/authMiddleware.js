@@ -8,6 +8,7 @@ exports.isAdmin = (req, res, next) => {
         }
         const token = authHeader.split(' ')[1];
         const decodedPayload = jwt.verify(token, process.env.JWT_SECRET);
+        //Already Check Token is Expired or Not
 
         if (decodedPayload.role !== 'admin') {
             return res.status(403).json({ error: 'Forbidden: Admin access required.' });
@@ -29,6 +30,7 @@ exports.isAuthenticated = (req, res, next) => {
 
         const token = authHeader.split(' ')[1];
         const decodedPayload = jwt.verify(token, process.env.JWT_SECRET);
+        //Already Check Token is Expired or Not
 
         // ✨ Attach the decoded user payload to the request object
         req.user = decodedPayload;

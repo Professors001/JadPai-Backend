@@ -119,26 +119,27 @@ exports.deleteEvent = async (req, res) => {
 exports.getAllEventsThatUserNotAttending = async (req, res) => {
     const userId = req.params.id;
     try {
-        const conn = await connectMySQL();
-        // const [results] = await conn.query(
-        //     'SELECT * FROM events WHERE id NOT IN (SELECT event_id FROM enrollments WHERE user_id = ?) ORDER BY id DESC', 
-        //     [userId]
-        // );
+        
         const [results] = await conn.query(
             `
                 SELECT
                     e.*,
-                    (SELECT COUNT(*) 
-                    FROM enrollments 
-                    WHERE event_id = e.id AND status = 'confirmed'
-                    ) AS confirmed_count
+                    COALESCE(confirmed.confirmed_count, 0) AS confirmed_count
                 FROM
                     events AS e
+                LEFT JOIN
+                    enrollments AS user_enrollment ON e.id = user_enrollment.event_id AND user_enrollment.user_id = ?
+                LEFT JOIN
+                    (SELECT event_id, COUNT(*) AS confirmed_count 
+                     FROM enrollments 
+                     WHERE status = 'confirmed' 
+                     GROUP BY event_id
+                    ) AS confirmed ON e.id = confirmed.event_id
                 WHERE
-                    id NOT IN (SELECT event_id FROM enrollments WHERE user_id = ?)
+                    user_enrollment.event_id IS NULL
                 ORDER BY
-                    e.id DESC; -- Optional: order by most recent events
-            `, 
+                    e.id DESC
+            `,
             [userId]
         );
         res.json(results);
