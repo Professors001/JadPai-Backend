@@ -29,16 +29,18 @@ exports.getEnrollmentById = async (req, res) => {
 };
 
 exports.createEnrollment = async (req, res) => {
-    // 1. Get userId directly from the request body, along with other fields.
-    const { name, phone, email, eventId, userId } = req.body;
-    const pictureFile = req.file;
-
-    // 2. Validation
-    if (!name || !phone || !email || !pictureFile || !eventId || !userId) {
-        return res.status(400).json({ error: 'All fields, including userId and eventId, are required.' });
-    }
-
     try {
+        // ✨ The middleware has already done the verification.
+        // We can now safely get the user ID from the req.user object.
+        const verifiedUserId = req.user.id;
+
+        const { name, phone, email, eventId } = req.body;
+        const pictureFile = req.file;
+
+        if (!name || !phone || !email || !pictureFile || !eventId) {
+            return res.status(400).json({ error: 'All fields are required.' });
+        }
+
         const imagePath = `/uploads/${pictureFile.filename}`;
 
         const newEnrollmentData = {
@@ -48,17 +50,20 @@ exports.createEnrollment = async (req, res) => {
             evidence_img_path: imagePath,
             status: 'pending',
             enroll_date: new Date(),
-            user_id: parseInt(userId, 10), // Use the userId from the request body
-            event_id: parseInt(eventId, 10), 
+            user_id: verifiedUserId, // Use the secure ID from req.user
+            event_id: parseInt(eventId, 10),
         };
-        
+
         const conn = await connectMySQL();
         const [result] = await conn.query('INSERT INTO enrollments SET ?', [newEnrollmentData]);
-        const enrollmentId = result.insertId;
 
-        res.status(201).json({ message: 'Enrollment created successfully', enrollmentId: enrollmentId });
+        res.status(201).json({
+            message: 'Enrollment created successfully',
+            enrollmentId: result.insertId
+        });
 
     } catch (error) {
+        // This catch block now only handles application/database errors.
         console.error('Error creating enrollment:', error.message);
         res.status(500).json({ error: 'Error creating enrollment' });
     }
